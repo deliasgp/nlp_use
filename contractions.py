@@ -1,16 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Oct 13 22:46:17 2021
-
-@author: daniel
-"""
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Aug 01 01:11:02 2016
-
-@author: DIP
-"""
-
 CONTRACTION_MAP = {
 "ain't": "is not",
 "aren't": "are not",
