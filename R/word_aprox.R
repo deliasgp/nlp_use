@@ -1,3 +1,10 @@
+tok <- function(x,lc = T){
+  x <- unique(x)
+  res <- tokenize_words(x,lowercase=lc) %>% unlist()
+  res <- paste(res,collapse = " ")
+  return(res)
+}
+#-----------------------------------------------------*
 word_aprox <- function(x,y,p=c(0.3)){
   #---------------------------------------------------*
   #PASO 1: COINCIDENCIAS EN PALABRAS
