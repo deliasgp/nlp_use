@@ -7,6 +7,7 @@ Created on Mon Oct  4 16:08:27 2021
 import pandas as pd
 import numpy as np
 import nltk
+nltk.download('stopwords')
 import spacy
 import re
 import unicodedata
