@@ -40,12 +40,12 @@ def corregir_comentarios(comments):
 
     # Devolver el comentario corregido
     return corrected_comment
-#----------------------------------------------------------------------------*    
+#----------------------------------------------------------------------------*
 def lemmatize_text(text):
     #La lematización es un proceso lingüístico que consiste en, 
     #dada una forma flexionada (es decir, en plural, en femenino, conjugada, etc), hallar el lema correspondiente. 
     #El lema es la forma que por convenio se acepta como representante de todas las formas flexionadas de una misma palabra
-    text = nlp(text)
+    text = nlp(text)    
     text = ' '.join([word.lemma_ for word in text])
     return text
 #lemmatize_text(texto)
@@ -153,8 +153,9 @@ def stop_words_use(local_file,maindir):
             "el","la","los","las","para","de","en","y","que","vista",
             "a","e","i","o","u","niño","docente","niña","niñas","niños","me","nos",
             "primero","segundo","tercero","cuarto","quinto","sexto","por","to","ro","do","er","grado","grados",
-            "estudiantes","alumnos","del","primaria","secundaria","multigrado","institución","institucion","ie","iiee",
+            "estudiantes",'docentes',"alumnos","del","primaria","secundaria","multigrado","institución","institucion","ie","iiee",
             "alumnas","alumno","alumna","dotacion","dotación"]
+    
     d_dpto = np.unique(ubigeo_use['REGION']).tolist()
     for i in range(len(d_dpto)):
         d_dpto[i] = d_dpto[i].lower()
@@ -174,7 +175,7 @@ def stop_words_use(local_file,maindir):
                  #----------------------------*   
     lista_stop_word = sw_1 + d_dpto + d_prov + d_dist + cen_pob + numeros + dias_mes
     return lista_stop_word
-#-----------------------------------------------------------------------------
+#----------------------------------------------------------------------------- 
 def normalizar_texto(corpus, contraction_expansion=True,
                      accented_char_removal=True, text_lower_case=True, 
                      text_stemming=False, text_lemmatization=True, 
@@ -226,10 +227,3 @@ def normalizar_texto(corpus, contraction_expansion=True,
         normalized_corpus.append(doc)
     #-------------------------------------------------------------------------*    
     return normalized_corpus
-
-
-
-
-
-
-
