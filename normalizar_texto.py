@@ -21,6 +21,26 @@ stopword_list = nltk.corpus.stopwords.words('spanish')
 #-----------------------------------------------------------------------------*
 nlp = spacy.load('es_core_news_sm')
 #----------------------------------------------------------------------------*
+from spellchecker import SpellChecker
+#----------------------------------------------------------------------------*
+def corregir_comentarios(comments):
+    # Inicializar el corrector ortográfico
+    spell = SpellChecker(language='es')
+
+    # Corregir el comentario
+    words = comments.split()
+    corrected_words = []
+    for word in words:
+        # Si la palabra no está en el diccionario, corregir la ortografía
+        if not spell.correction(word) == word and spell.correction(word) is not None:
+            corrected_words.append(spell.correction(word))
+        else:
+            corrected_words.append(word)
+    corrected_comment = ' '.join(corrected_words)
+
+    # Devolver el comentario corregido
+    return corrected_comment
+#----------------------------------------------------------------------------*    
 def lemmatize_text(text):
     #La lematización es un proceso lingüístico que consiste en, 
     #dada una forma flexionada (es decir, en plural, en femenino, conjugada, etc), hallar el lema correspondiente. 
@@ -160,58 +180,51 @@ def normalizar_texto(corpus, contraction_expansion=True,
                      text_stemming=False, text_lemmatization=True, 
                      special_char_removal=True, remove_digits=True,
                      stopword_removal=True, special_cases = True,
+                     autocorrecion = True,
                      stopwords=stopword_list):
-    
+    #largo = len(corpus)
     normalized_corpus = []
     # normalize each document in the corpus
-    for doc in corpus:
-
+    for i, doc in enumerate(corpus):        
         # remove extra newlines
-        doc = doc.translate(doc.maketrans("\n\t\r", "   "))
-        
+        doc = doc.translate(doc.maketrans("\n\t\r", "   "))        
         # lowercase the text    
         if text_lower_case:
-            doc = doc.lower()
-            
+            doc = doc.lower()        
         if special_cases:
             doc = remove_special_cases(doc)
-        
         # remove stopwords
         if stopword_removal:
             doc = remove_stopwords(doc, is_lower_case=text_lower_case, stopwords=stopwords)
-
         # remove accented characters
         if accented_char_removal:
             doc = remove_accented_chars(doc)
-
         # expand contractions    
         if contraction_expansion:
-            doc = expand_contractions(doc)
-
+            doc = expand_contractions(doc)   
+        # autocorrecion
+        if autocorrecion:
+                doc=corregir_comentarios(doc)                         
         # lemmatize text
         if text_lemmatization:
-            doc = lemmatize_text(doc)
-
+            doc = lemmatize_text(doc)        
         # stem text
         if text_stemming and not text_lemmatization:
         	doc = simple_porter_stemming(doc)
-
         # remove special characters and\or digits    
         if special_char_removal:
             # insert spaces between special characters to isolate them    
             special_char_pattern = re.compile(r'([{.(-)!}])')
             doc = special_char_pattern.sub(" \\1 ", doc)
-            doc = remove_special_characters(doc, remove_digits=remove_digits)  
-            
-        # remove extra whitespace
+            doc = remove_special_characters(doc, remove_digits=remove_digits)
+        # remove extra whitespace       
         doc = re.sub(' +', ' ', doc)
-
         # remove extra whitespace
         doc = re.sub(' +', ' ', doc)
         doc = doc.strip()
-            
+        print(i)    
         normalized_corpus.append(doc)
-        
+    #-------------------------------------------------------------------------*    
     return normalized_corpus
 
 
