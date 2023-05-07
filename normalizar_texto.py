@@ -223,7 +223,7 @@ def normalizar_texto(corpus, contraction_expansion=True,
         # remove extra whitespace
         doc = re.sub(' +', ' ', doc)
         doc = doc.strip()
-        print(i)    
+        #print(i)    
         normalized_corpus.append(doc)
     #-------------------------------------------------------------------------*    
     return normalized_corpus
