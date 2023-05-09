@@ -102,7 +102,8 @@ def remove_accented_chars(text):
     return text
 #----------------------------------------------------------------------------*
 def remove_special_characters(text, remove_digits=False):
-    pattern = r'[^a-zA-Z0-9\s]|\[|\]' if not remove_digits else r'[^a-zA-Z\s]|\[|\]'
+    pattern = r'[^a-zA-Z0-9\s]|\[|\]'
+    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8', 'ignore')
     text = re.sub(pattern, '', text)
     return text
 #----------------------------------------------------------------------------*
