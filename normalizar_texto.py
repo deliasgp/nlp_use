@@ -91,8 +91,14 @@ def expand_contractions(text, contraction_mapping=CONTRACTION_MAP):
     expanded_text = re.sub("'", "", expanded_text)
     return expanded_text
 #----------------------------------------------------------------------------*
+#def remove_accented_chars(text):
+#    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8', 'ignore')
+#    return text
+#-----------------------------------------------------------------------------*
 def remove_accented_chars(text):
-    text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('utf-8', 'ignore')
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if not unicodedata.combining(c))
+    text = unicodedata.normalize('NFC', text)
     return text
 #----------------------------------------------------------------------------*
 def remove_special_characters(text, remove_digits=False):
@@ -205,20 +211,19 @@ def normalizar_texto(corpus, contraction_expansion=True,
             doc = expand_contractions(doc)   
         # autocorrecion
         if autocorrecion:
-                doc=corregir_comentarios(doc)                         
-        # lemmatize text
-        if text_lemmatization:
-            doc = lemmatize_text(doc)        
-        # stem text
-        if text_stemming and not text_lemmatization:
-        	doc = simple_porter_stemming(doc)
+                doc=corregir_comentarios(doc)                       
         # remove special characters and\or digits    
         if special_char_removal:
             # insert spaces between special characters to isolate them    
             special_char_pattern = re.compile(r'([{.(-)!}])')
             doc = special_char_pattern.sub(" \\1 ", doc)
             doc = remove_special_characters(doc, remove_digits=remove_digits)
-        # remove extra whitespace       
+        # lemmatize text
+        if text_lemmatization:
+            doc = lemmatize_text(doc)        
+        # stem text
+        if text_stemming and not text_lemmatization:
+        	doc = simple_porter_stemming(doc)       
         doc = re.sub(' +', ' ', doc)
         # remove extra whitespace
         doc = re.sub(' +', ' ', doc)
