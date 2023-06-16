@@ -7,7 +7,7 @@
 
 import pandas as pd
 import numpy as np
-#import gensim
+import gensim
 import nltk #nltk.download('punkt')
 import sys
 sys.path.append('D:/repositorios_git/nlp_use/')
@@ -40,19 +40,120 @@ texto_limpio = []
 for doc in text_corpus:
     word = palabras_repetidas(doc)
     texto_limpio.append(word)
-
+#-----------------------------------------------------------------------------*
 datos['obs'] = texto_limpio
 datos['obs'] = datos.obs.replace('', 'NA')
 datos['target'] = np.where(datos.flg_cat==97,1,0)
-#%%Modelos de ingienería de características
-#%%%Bag of Words (term frequency) model:
+#%%2 - Modelos de ingienería de características
+#Objetivo: Transformar los textos en matrices de datos para los modelos
+#Construyendo datos de prueba y datos de entrenamiento
+from sklearn.model_selection import train_test_split
+train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
+    datos['obs'], #np.array(datos['obs'])
+    datos['target'], #np.array(datos['target'])
+    test_size=1/3, random_state=42)
+#%%%2.1 - Bag of Words (term frequency) model:
+from sklearn.feature_extraction.text import CountVectorizer
+cv = CountVectorizer(binary=True, min_df=0.0, max_df=1.0)
+cv_train_features = cv.fit_transform(train_corpus)
+cv_test_features = cv.transform(test_corpus)
+#%%%2.2 - Bag of N-Grams model:
+bv = CountVectorizer(binary=True, ngram_range=(2,2))
+bv_train_features = bv.fit_transform(train_corpus)
+bv_test_features = bv.transform(test_corpus)
+
+#%%%2.3 - TF-IDF model: 
+#term frequency-inverse document frequency.
+from sklearn.feature_extraction.text import TfidfVectorizer
+tv = TfidfVectorizer(use_idf=True, min_df=0.0, max_df=1.0)
+tv_train_features = tv.fit_transform(train_corpus)
+tv_test_features = tv.transform(test_corpus)
+
+#%%%2.4 - Word2Vec model:
+tokenized_train = [nt.tokenizer.tokenize(text)
+                   for text in train_corpus]
+tokenized_test = [nt.tokenizer.tokenize(text)
+                   for text in test_corpus]
+#-----------------------------------------------------------------------------*
+# average_word_vectors: 
+#   calcula el vector promedio de una lista de palabras 
+#   dadas utilizando el modelo Word2Vec y el vocabulario. 
+#   El vector promedio se calcula sumando los vectores de todas las palabras presentes en el vocabulario y 
+#   dividiéndolo por el número total de palabras en el vocabulario. 
+#
+# document_vectorizer:
+#   Finalmente, se aplica esta función a cada documento (fila) en el corpus utilizando una comprensión de lista, 
+#   y los resultados se almacenan en una lista llamada features.
+#-----------------------------------------------------------------------------*
+def average_word_vectors(words, model, vocabulary, num_features):
+    # Crear un vector de características inicializado con ceros
+    feature_vector = np.zeros((num_features,), dtype="float64")  
+    nwords = 0.  # Contador de palabras válidas
+    for word in words:  # Iterar sobre las palabras del documento
+        # Verificar si la palabra está en el vocabulario del modelo Word2Vec
+        if word in vocabulary:  
+            # Incrementar el contador de palabras válidas
+            nwords = nwords + 1. 
+            # Sumar el vector de la palabra actual (modelada por w2vec) al vector de características
+            feature_vector = np.add(feature_vector, model.wv[word])  
+    if nwords > 0:  # Verificar si hay palabras válidas en el documento
+        # Calcular el promedio dividiendo el vector de características por el número de palabras válidas
+        feature_vector = np.divide(feature_vector, nwords)  
+    return feature_vector
+
+
+def document_vectorizer(corpus, model, num_features):
+    vocabulary = set(model.wv.index_to_key)  # Crear un conjunto de palabras del modelo Word2Vec
+    features = np.zeros((len(corpus), num_features), dtype="float64")  # Crear una matriz de ceros para almacenar los vectores de características de todos los documentos
+    for i, tokenized_sentence in enumerate(corpus):  # Iterar sobre los documentos tokenizados en el corpus
+        feature_vector = average_word_vectors(
+            tokenized_sentence,
+            model, 
+            vocabulary, 
+            num_features
+        )  # Calcular el vector de características promedio para el documento actual
+        features[i] = feature_vector  # Almacenar el vector de características en la fila correspondiente de la matriz
+        
+    return features  # Devolver la matriz de vectores de característica
+#-----------------------------------------------------------------------------*
+# build word2vec model
+#-----------------------------------------------------------------------------*
+w2v_num_features = 1000
+w2v_model = gensim.models.Word2Vec(tokenized_train, 
+                                   vector_size=w2v_num_features, 
+                                   window=100,
+                                   min_count=2, 
+                                   sample=1e-3, 
+                                   sg=1, epochs =5, workers=10)
+#-----------------------------------------------------------------------------*
+a1 = ['recepcion', 'tableta', 'educativo']
+a2 = set(w2v_model.wv.index_to_key)
+#-----------------------------------------------------------------------------*
+average_word_vectors(words = a1,
+                     model = w2v_model,
+                     vocabulary= a2,
+                     num_features = w2v_num_features)
+
+
+avg_wv_train_features = document_vectorizer(corpus = tokenized_train, 
+                                            model = w2v_model,
+                                            num_features = w2v_num_features)
+
+avg_wv_test_features = document_vectorizer(corpus = tokenized_test, 
+                                           model = w2v_model,
+                                           num_features = w2v_num_features)    
+
+print('Word2Vec model:> Train features shape:', 
+      avg_wv_train_features.shape,
+      ' Test features shape:', avg_wv_test_features.shape)
+#%%%2.5 - GloVe model:
     
-#%%%Bag of N-Grams model:
-#%%%TF-IDF model:
-#%%%Word2Vec model:
-#%%%GloVe model:
     
-#%%Modelos de clasificacióm    
+    
+    
+    
+    
+#%%3-Modelos de clasificacióm    
 #%%%Multinomial Naïve Bayes
 #%%%Logistic regression
 #%%%Support vector machines
