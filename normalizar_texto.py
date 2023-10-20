@@ -117,6 +117,15 @@ def remove_stopwords(text, is_lower_case=False, stopwords=stopword_list):
     filtered_text = ' '.join(filtered_tokens)    
     return filtered_text
 #----------------------------------------------------------------------------*
+def expandir_grados(text):
+    text= re.sub("1ro","primero",text)
+    text= re.sub("2do","segundo",text)
+    text= re.sub("3ro","tercero",text)
+    text= re.sub("4to","cuarto",text)
+    text= re.sub("5to","quinto",text)
+    text= re.sub("6to","primero",text)
+    return text
+#----------------------------------------------------------------------------*  
 def remove_special_cases(text):
     text = re.sub('\S*\d+\S*', '', text) # CUALQUIER PALABRA QUE CONTENGA NÚMEROS
     text = re.sub('\s+', ' ', text) #MULTIPLES ESPACIOS EN BLANCO A UNO
@@ -130,6 +139,7 @@ def remove_special_cases(text):
     text = re.sub('\w+decep\w+|decep\w+', 'recibió', text) #variantes de la         
     text = re.sub('hg[\w]*', '', text) #Palabra serie  
     text = re.sub('aoc*', '', text) #Palabra serie  
+    text = re.sub('ugel', 'ugel ', text) #MULTIPLES ESPACIOS EN BLANCO A UNO
     text = re.sub('\s+', ' ', text) #MULTIPLES ESPACIOS EN BLANCO A UNO
     return text
 #-----------------------------------------------------------------------------
@@ -138,7 +148,7 @@ def palabras_repetidas(text):
     text = ' '.join(sorted(set(text), key=text.index))
     return text    
 #-----------------------------------------------------------------------------
-def stop_words_use(local_file,maindir):
+def stop_words_use(local_file,maindir,label_benef=True,sw_cen_pob=True):
     #-----------------------*
     if local_file==True:
         archivo_dir = maindir 
@@ -156,13 +166,17 @@ def stop_words_use(local_file,maindir):
                "treinta","cuarenta","cincuenta","sesenta","setenta","ochenta","noventa",
                "cien","doscientos","trescientos","cuatrocientos","quinientos","seiscientos","setecientos","ochocientos","novecientos","mil"]
     
-    sw_1 = ["un","una",
-            "el","la","los","las","para","de","en","y","que","vista",
-            "a","e","i","o","u","niño","docente","niña","niñas","niños","me","nos",
-            "primero","segundo","tercero","cuarto","quinto","sexto","por","to","ro","do","er","grado","grados",
-            "estudiantes",'docentes',"alumnos","del","primaria","secundaria","multigrado","institución","institucion","ie","iiee",
-            "alumnas","alumno","alumna","dotacion","dotación"]
-    
+
+    if label_benef==True:
+        sw_1 = ["un","una",
+                "el","la","los","las","para","de","en","y","que","vista",
+                "a","e","i","o","u","niño","docente","niña","niñas","niños","me","nos",
+                "primero","segundo","tercero","cuarto","quinto","sexto","por","to","ro","do","er","grado","grados",
+                "estudiantes",'docentes',"alumnos","del","primaria","secundaria","multigrado","institución","institucion","ie","iiee",
+                "alumnas","alumno","alumna","dotacion","dotación"] 
+    else:
+        sw_1 = ["a","e","i","o","u"]      
+        
     d_dpto = np.unique(ubigeo_use['REGION']).tolist()
     for i in range(len(d_dpto)):
         d_dpto[i] = d_dpto[i].lower()
@@ -176,10 +190,13 @@ def stop_words_use(local_file,maindir):
     for i in range(len(d_dist)):
         d_dist[i] = d_dist[i].lower()
     #----------------------------*
-    cen_pob = np.unique(ubigeo_use['CEN_POB']).tolist()
-    for i in range(len(cen_pob)):
-                 cen_pob[i] = cen_pob[i].lower()
-                 #----------------------------*   
+    if sw_cen_pob==True:
+        cen_pob = np.unique(ubigeo_use['CEN_POB']).tolist()
+        for i in range(len(cen_pob)):
+                     cen_pob[i] = cen_pob[i].lower()
+                     #----------------------------*
+    else:
+        cen_pob = ["NA"]
     lista_stop_word = sw_1 + d_dpto + d_prov + d_dist + cen_pob + numeros + dias_mes
     return lista_stop_word
 #----------------------------------------------------------------------------- 
@@ -188,7 +205,7 @@ def normalizar_texto(corpus, contraction_expansion=True,
                      text_stemming=False, text_lemmatization=True, 
                      special_char_removal=True, remove_digits=True,
                      stopword_removal=True, special_cases = True,
-                     autocorrecion = True,
+                     autocorrecion = True,exp_grados = True,
                      stopwords=stopword_list):
     #largo = len(corpus)
     normalized_corpus = []
@@ -198,7 +215,12 @@ def normalizar_texto(corpus, contraction_expansion=True,
         doc = doc.translate(doc.maketrans("\n\t\r", "   "))        
         # lowercase the text    
         if text_lower_case:
-            doc = doc.lower()        
+            doc = doc.lower()
+        if exp_grados:
+            doc = expandir_grados(doc)
+        # expand contractions    
+        if contraction_expansion:
+            doc = expand_contractions(doc)
         if special_cases:
             doc = remove_special_cases(doc)
         # remove stopwords
@@ -207,9 +229,6 @@ def normalizar_texto(corpus, contraction_expansion=True,
         # remove accented characters
         if accented_char_removal:
             doc = remove_accented_chars(doc)
-        # expand contractions    
-        if contraction_expansion:
-            doc = expand_contractions(doc)   
         # autocorrecion
         if autocorrecion:
                 doc=corregir_comentarios(doc)                       

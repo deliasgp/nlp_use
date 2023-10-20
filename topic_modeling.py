@@ -1,23 +1,23 @@
-# -*- coding: utf-8 -*-
-#en cmd prompt
-#pip install -U pip setuptools wheel
-#pip install -U spacy
-#python -m spacy download es_core_news_sm
-#pip install pyspellchecker
-
 import pandas as pd
 import numpy as np
 import gensim
-import nltk #nltk.download('punkt')
+import nltk
+#nltk.download('punkt')
 import sys
+from sklearn.model_selection import train_test_split
 sys.path.append('D:/repositorios_git/nlp_use/')
 import normalizar_texto as nt
 #-----------------------------------------------------------------------------*
-obs_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/Input/observaciones/20230104/obs_recepcion_20230104.xlsx'
+fec_t = "20230816"
+obs_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/Input/observaciones/'+fec_t+'/obs_recepcion_'+fec_t+'.xlsx'
 datos = pd.read_excel(obs_dir)
+datos = datos[((datos['flg_cat']==97) | 
+                           (datos['flg_cat']==1) | 
+                           (datos['flg_cat']==2) |
+                           (datos['flg_cat']==3))==False]
 #-----------------------------------------------------------------------------*
 stopword_list = nltk.corpus.stopwords.words('spanish')
-stop_words_tablets = nt.stop_words_use(local_file=False,maindir='') + stopword_list + ['estudiante','padre','madre','padres','madres']
+stop_words_tablets = nt.stop_words_use(local_file=False,maindir='') + stopword_list + ['estudiante','padre','madre','padres','madres']+ ['segun','san']
 #-----------------------------------------------------------------------------*
 eliminar_stop_words = ['no','si','solo','se']
 for word in eliminar_stop_words:
@@ -44,448 +44,353 @@ for doc in text_corpus:
 datos['obs'] = texto_limpio
 datos['obs'] = datos.obs.replace('', 'NA')
 datos['target'] = np.where(datos.flg_cat==97,1,0)
-#%%2 - Modelos de ingienería de características
-#Objetivo: Transformar los textos en matrices de datos para los modelos
-#Construyendo datos de prueba y datos de entrenamiento
-from sklearn.model_selection import train_test_split
-train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
-    datos['obs'], #np.array(datos['obs'])
-    datos['target'], #np.array(datos['target'])
-    test_size=1/3, random_state=42)
-#%%%2.1 - Bag of Words (term frequency) model:
-from sklearn.feature_extraction.text import CountVectorizer
-cv = CountVectorizer(binary=True, min_df=0.0, max_df=1.0)
-cv_train_features = cv.fit_transform(train_corpus)
-cv_test_features = cv.transform(test_corpus)
-#%%%2.2 - Bag of N-Grams model:
-bv = CountVectorizer(binary=True, ngram_range=(2,2))
-bv_train_features = bv.fit_transform(train_corpus)
-bv_test_features = bv.transform(test_corpus)
-
-#%%%2.3 - TF-IDF model: 
-#term frequency-inverse document frequency.
-from sklearn.feature_extraction.text import TfidfVectorizer
-tv = TfidfVectorizer(use_idf=True, min_df=0.0, max_df=1.0)
-tv_train_features = tv.fit_transform(train_corpus)
-tv_test_features = tv.transform(test_corpus)
-
-#%%%2.4 - Word2Vec model:
-tokenized_train = [nt.tokenizer.tokenize(text)
-                   for text in train_corpus]
-tokenized_test = [nt.tokenizer.tokenize(text)
-                   for text in test_corpus]
 #-----------------------------------------------------------------------------*
-# average_word_vectors: 
-#   calcula el vector promedio de una lista de palabras 
-#   dadas utilizando el modelo Word2Vec y el vocabulario. 
-#   El vector promedio se calcula sumando los vectores de todas las palabras presentes en el vocabulario y 
-#   dividiéndolo por el número total de palabras en el vocabulario. 
-#
-# document_vectorizer:
-#   Finalmente, se aplica esta función a cada documento (fila) en el corpus utilizando una comprensión de lista, 
-#   y los resultados se almacenan en una lista llamada features.
+datos['obs'] = datos['obs'].str.replace("él", "se")
 #-----------------------------------------------------------------------------*
-def average_word_vectors(words, model, vocabulary, num_features):
-    # Crear un vector de características inicializado con ceros
-    feature_vector = np.zeros((num_features,), dtype="float64")  
-    nwords = 0.  # Contador de palabras válidas
-    for word in words:  # Iterar sobre las palabras del documento
-        # Verificar si la palabra está en el vocabulario del modelo Word2Vec
-        if word in vocabulary:  
-            # Incrementar el contador de palabras válidas
-            nwords = nwords + 1. 
-            # Sumar el vector de la palabra actual (modelada por w2vec) al vector de características
-            feature_vector = np.add(feature_vector, model.wv[word])  
-    if nwords > 0:  # Verificar si hay palabras válidas en el documento
-        # Calcular el promedio dividiendo el vector de características por el número de palabras válidas
-        feature_vector = np.divide(feature_vector, nwords)  
-    return feature_vector
+print(np.mean(datos['target']))
+#%% Topic Label
+print("Esta sección busca categorizar respuestas donde los usurios indican que tienen alguna observación")
+
+datos_topic = datos.copy()
+
+print(datos_topic.shape)
+
+datos_topic['flg_cat'].value_counts()
+
+
+topic_train_corpus, topic_test_corpus, topic_train_label_nums, topic_test_label_nums = train_test_split(
+     datos_topic['obs'], #np.array(datos['obs'])
+     datos_topic['flg_cat'], #np.array(datos['target'])
+     test_size=1/10, random_state=42)
+
+index_train_topic = topic_train_corpus.index
+index_test_topic = topic_test_corpus.index
+
+#Tokenizar las oraciones y consruir bigramas
+text_tokens = [nltk.word_tokenize(sentence) for sentence in topic_train_corpus]
+bigram_model = gensim.models.phrases.Phrases(text_tokens, min_count=1, threshold=0.1)
+ #min_count (float, optional) – Ignore all words and bigrams with total collected count lower than this value.
+ #threshold (float, optional) – Represent a score threshold for forming the phrases (higher means fewer phrases). 
+ #A phrase of words a followed by b is accepted if the score of the phrase is greater than threshold. Heavily depends on concrete scoring-function, 
+ #see the scoring parameter.
+
+norm_corpus_bigrams = [bigram_model[doc] for doc in text_tokens]
+# Create a dictionary representation of the documents.
+dictionary = gensim.corpora.Dictionary(norm_corpus_bigrams)
+print('Total Vocabulary Size:', len(dictionary))
+
+bow_corpus = [dictionary.doc2bow(text) for text in norm_corpus_bigrams]
+#%%% LSI (Latent Semantic Indexing)-BoW
+#words that are used in the same contexts tend to have similar meanings.
+from gensim.models.coherencemodel import CoherenceModel
+
+min_topics = 2
+max_topics = 10
+#Definir una lista para almacenar los resultados
+coherence_scores = []
+models = []
+#Iterar sobre los números de tópicos y calcular la coherencia
+from datetime import datetime
+start = datetime.now()
+np.random.seed(50)
+for num_topics in range(min_topics, max_topics + 1):
+    lsi_bow = gensim.models.LsiModel(bow_corpus, 
+                                     id2word=dictionary, 
+                                     num_topics=num_topics,
+                                     onepass=True, 
+                                     chunksize=1740, 
+                                     power_iters=1000)    
+    coherence_model = CoherenceModel(model=lsi_bow, texts=norm_corpus_bigrams, corpus=bow_corpus, coherence='c_v')
+    coherence_score = coherence_model.get_coherence()
+    coherence_scores.append((num_topics, coherence_score))
+    models.append(lsi_bow)
+print(datetime.now() - start)
+# Crear un dataframe a partir de los resultados
+lsi_df = pd.DataFrame(coherence_scores, columns=['Número de Tópicos', 'Coherencia'])
+print(lsi_df)
+
+
+import matplotlib.pyplot as plt
+
+# Crear un gráfico de línea para los resultados
+plt.plot(lsi_df['Número de Tópicos'], lsi_df['Coherencia'], marker='o')
+# Añadir etiquetas y título al gráfico
+plt.xlabel('Número de Tópicos')
+plt.ylabel('Coherencia')
+plt.title('Relación entre el número de tópicos y la coherencia')
+#Mostrar el gráfico
+plt.show()
 
-
-def document_vectorizer(corpus, model, num_features):
-    vocabulary = set(model.wv.index_to_key)  # Crear un conjunto de palabras del modelo Word2Vec
-    features = np.zeros((len(corpus), num_features), dtype="float64")  # Crear una matriz de ceros para almacenar los vectores de características de todos los documentos
-    for i, tokenized_sentence in enumerate(corpus):  # Iterar sobre los documentos tokenizados en el corpus
-        feature_vector = average_word_vectors(
-            tokenized_sentence,
-            model, 
-            vocabulary, 
-            num_features
-        )  # Calcular el vector de características promedio para el documento actual
-        features[i] = feature_vector  # Almacenar el vector de características en la fila correspondiente de la matriz
-        
-    return features  # Devolver la matriz de vectores de característica
-#-----------------------------------------------------------------------------*
-# build word2vec model
-#-----------------------------------------------------------------------------*
-w2v_num_features = 1000
-w2v_model = gensim.models.Word2Vec(tokenized_train, 
-                                   vector_size=w2v_num_features, 
-                                   window=100,
-                                   min_count=2, 
-                                   sample=1e-3, 
-                                   sg=1, epochs =5, workers=10)
-#-----------------------------------------------------------------------------*
-a1 = ['recepcion', 'tableta', 'educativo']
-a2 = set(w2v_model.wv.index_to_key)
-#-----------------------------------------------------------------------------*
-average_word_vectors(words = a1,
-                     model = w2v_model,
-                     vocabulary= a2,
-                     num_features = w2v_num_features)
-
-
-avg_wv_train_features = document_vectorizer(corpus = tokenized_train, 
-                                            model = w2v_model,
-                                            num_features = w2v_num_features)
-
-avg_wv_test_features = document_vectorizer(corpus = tokenized_test, 
-                                           model = w2v_model,
-                                           num_features = w2v_num_features)    
-
-print('Word2Vec model:> Train features shape:', 
-      avg_wv_train_features.shape,
-      ' Test features shape:', avg_wv_test_features.shape)
-#%%%2.5 - GloVe model:
-    
-    
-    
-    
-    
-    
-#%%3-Modelos de clasificacióm    
-#%%%Multinomial Naïve Bayes
-#%%%Logistic regression
-#%%%Support vector machines
-#%%%Random forest
-#%%%Gradient boosting machine
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# """##  Definiendo datos de entrenamiento y de prueba"""
-# #train_test_split(data.drop(columns=['target']), data['target'], test_size=0.2, random_state=42)
-# from sklearn.model_selection import train_test_split
-# train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
-#     datos['obs'], #np.array(datos['obs'])
-#     datos['target'], #np.array(datos['target'])
-#     test_size=1/3, random_state=42)
-
-# index_train = train_corpus.index
-# index_test = test_corpus.index
-
-# train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
-#     np.array(datos['obs']), #datos['obs']
-#     np.array(datos['target']), #datos['target']
-#     test_size=1/3, random_state=42)
-
-# """# Entrenamiento de modelo de clasificación"""
-
-# from sklearn.feature_extraction.text import CountVectorizer
-# cv = CountVectorizer(binary=False, min_df=0.0, max_df=1.0)
-# cv_train_features = cv.fit_transform(train_corpus)
-# cv_test_features = cv.transform(test_corpus)
-
-# #cv_matrix = cv_train_features.toarray()
-# #vocab_bag_of_words = cv.get_feature_names_out()
-# #cv_matrix = pd.DataFrame(cv_matrix, columns=vocab_bag_of_words)
-# #cv_matrix = np.sum(cv_matrix,axis=0)
-
-# from sklearn.linear_model import LogisticRegression
-# from sklearn.model_selection import cross_val_score
-# lr = LogisticRegression(penalty='l2', max_iter=100, C=1, random_state=42)
-# lr.fit(cv_train_features, train_label_nums)
-# #------------------------------------------------------------------------------*
-# lr_bow_cv_scores = cross_val_score(lr, cv_train_features, train_label_nums, cv=5)
-# lr_bow_cv_mean_score = np.mean(lr_bow_cv_scores)
-
-# """## Métricas de precisión"""
-
-# lr_bow_cv_scores = cross_val_score(lr, cv_train_features, train_label_nums, cv=5)
-# lr_bow_cv_mean_score = np.mean(lr_bow_cv_scores)
-# print('CV Accuracy (5-fold):', lr_bow_cv_scores)
-# print('Mean CV Accuracy:', lr_bow_cv_mean_score)
-# lr_bow_test_score = lr.score(cv_test_features, test_label_nums)
-# print('Test Accuracy:', lr_bow_test_score)
-
-# from sklearn.metrics import roc_curve, roc_auc_score
-# import matplotlib.pyplot as plt
-
-# # Obtener las probabilidades predichas y las verdaderas etiquetas
-# y_prob = lr.predict_proba(cv_test_features)[:, 1]
-# y_true = test_label_nums
-# print(len(y_prob))
-
-# """Curva roc y corte óptimo"""
-
-# # Calcular la curva ROC
-# fpr, tpr, thresholds = roc_curve(y_true, y_prob)
-
-# # Calcular el área bajo la curva ROC
-# auc = roc_auc_score(y_true, y_prob)
-
-# # Graficar la curva ROC
-# plt.plot(fpr, tpr, label=f'ROC curve (AUC={auc:.2f})')
-# plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
-# plt.xlabel('False Positive Rate')
-# plt.ylabel('True Positive Rate')
-# plt.title('Receiver Operating Characteristic (ROC) Curve')
-# plt.legend()
-# plt.show()
-
-# # Encontrar el punto de corte óptimo
-# optimal_idx = np.argmax(tpr - fpr)
-# optimal_threshold = thresholds[optimal_idx]
-# print(f'Optimal threshold: {optimal_threshold:.2f}')
-
-# optimal_threshold
-
-# ninguna_observacion = y_prob>optimal_threshold
-# fitted_data = pd.DataFrame()
-# fitted_data['obs'] = test_corpus
-# fitted_data['target'] = test_label_nums
-# fitted_data['ninguna_observacion'] = ninguna_observacion
-
-# pd.crosstab(fitted_data['target'],fitted_data['ninguna_observacion'])
-
-# !pip freeze > requirements.txt
-
-# from google.colab import files
-# files.download('requirements.txt')
-
-# fitted_data.head(10)
-
-# """# Topic Modeling"""
-
-# datos_topic = datos.copy()
-# datos_topic = datos_topic[datos_topic['flg_cat']!=97]
-# print(datos_topic.shape)
-
-# train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
-#     datos_topic['obs'], #np.array(datos['obs'])
-#     datos_topic['target'], #np.array(datos['target'])
-#     test_size=1/3, random_state=42)
-
-# index_train_topic = train_corpus.index
-# index_test_topic = test_corpus.index
-
-# train_corpus, test_corpus, train_label_nums, test_label_nums = train_test_split(
-#     np.array(datos_topic['obs']), 
-#     np.array(datos_topic['flg_cat']),
-#     test_size=1/3, random_state=42)
-
-# datos_topic.head(10)
-
-# #norm_asigna = datos['obs']
-
-# import nltk
-# nltk.download('punkt')
-# # Lista de oraciones de ejemplo
-
-# # Tokenizar las oraciones
-# text_tokens = [nltk.word_tokenize(sentence) for sentence in train_corpus]
-# bigram_model = gensim.models.phrases.Phrases(text_tokens, min_count=1, threshold=1)
-# #min_count (float, optional) – Ignore all words and bigrams with total collected count lower than this value.
-# #threshold (float, optional) – Represent a score threshold for forming the phrases (higher means fewer phrases). 
-# #A phrase of words a followed by b is accepted if the score of the phrase is greater than threshold. Heavily depends on concrete scoring-function, 
-# #see the scoring parameter.
-
-# norm_corpus_bigrams = [bigram_model[doc] for doc in text_tokens]
-
-# # Create a dictionary representation of the documents.
-# dictionary = gensim.corpora.Dictionary(norm_corpus_bigrams)
-# print('Sample word to number mappings:', list(dictionary.items())[:100])
-# print('Total Vocabulary Size:', len(dictionary))
-
-# # Transforming corpus into bag of words vectors
-# bow_corpus = [dictionary.doc2bow(text) for text in norm_corpus_bigrams]
-
-# stoplist = stop_words_tablets
-# documents = train_corpus
-# texts = [
-#     [word for word in document.lower().split() if word not in stoplist]
-#     for document in documents
-# ]
-
-# """Número óptimo de tópicos"""
-
-# from gensim.test.utils import common_corpus, common_dictionary
-# from gensim.models.ldamodel import LdaModel
-# from gensim.models.coherencemodel import CoherenceModel
-
-# # Commented out IPython magic to ensure Python compatibility.
-# # %%time
-# # min_topics = 15
-# # max_topics = 30
-# # 
-# # # Definir una lista para almacenar los resultados
-# # coherence_scores = []
-# # models = []
-# # # Iterar sobre los números de tópicos y calcular la coherencia
-# # for num_topics in range(min_topics, max_topics + 1):
-# # 
-# #     lda_model = gensim.models.LdaModel(corpus=bow_corpus, id2word=dictionary,
-# #                                    chunksize=1740, alpha='auto',
-# #                                    eta='auto', random_state=42,
-# #                                    iterations=500, num_topics=num_topics,
-# #                                    passes=20, eval_every=None)
-# #     
-# #     coherence_model = CoherenceModel(model=lda_model, texts=norm_corpus_bigrams, corpus=bow_corpus, coherence='c_v')
-# #     coherence_score = coherence_model.get_coherence()
-# #     coherence_scores.append((num_topics, coherence_score))
-# #     models.append(lda_model)
-# # 
-# # # Crear un dataframe a partir de los resultados
-# # df = pd.DataFrame(coherence_scores, columns=['Número de Tópicos', 'Coherencia'])
-# # 
-# # # Imprimir el dataframe
-# # print(df)
-
-# import matplotlib.pyplot as plt
-
-# # Crear un gráfico de línea para los resultados
-# plt.plot(df['Número de Tópicos'], df['Coherencia'], marker='o')
-
-# # Añadir etiquetas y título al gráfico
-# plt.xlabel('Número de Tópicos')
-# plt.ylabel('Coherencia')
-# plt.title('Relación entre el número de tópicos y la coherencia')
-
-# # Mostrar el gráfico
-# plt.show()
 
 # """Obteniendo el máximo número de tópicos"""
+max_coherence_row = lsi_df.loc[lsi_df['Coherencia'].idxmax()]
+num_topics_max_coherence = max_coherence_row['Número de Tópicos']
 
-# max_coherence_row = df.loc[df['Coherencia'].idxmax()]
-# num_topics_max_coherence = max_coherence_row['Número de Tópicos']
+opt_topic  = num_topics_max_coherence
+best_model_idx = lsi_df[lsi_df['Número de Tópicos'] == opt_topic].index[0]
+best_lsi_model = models[best_model_idx]
+best_lsi_model.num_topics
 
-# topn = 20
-# opt_topic  = num_topics_max_coherence
-# best_model_idx = df[df['Número de Tópicos'] == opt_topic].index[0]
-# best_lda_model = models[best_model_idx]
-# best_lda_model.num_topics
+topn = 20
+for topic_id, topic in best_lsi_model.print_topics(num_topics=int(opt_topic), num_words=topn):
+   print('Topic #'+str(topic_id+1)+':')
+   print(topic)
+   print()
+#-----------------------------------------------------------------------------*    
+best_lsi_model.show_topic(1, topn=20)
+#-----------------------------------------------------------------------------*    
+for n in range(int(opt_topic)):
+    print('Topic #'+str(n+1)+':')
+    print('='*50)
+    d1 = []
+    d2 = []
+    for term, wt in lsi_bow.show_topic(n, topn=20):
+        if wt >= 0:
+            d1.append((term, round(wt, 3))) #Si los pesos son positivos
+        else:
+            d2.append((term, round(wt, 3))) #Si los pesos son negativos
+    print('Direction 1:', d1) #Dirección del tema 1
+    print('-'*50)
+    print('Direction 2:', d2) #Dirección del tema 2
+    print('-'*50)
+    print()
+#-----------------------------------------------------------------------------* 
+# Matrices - Singular Value Decomposition (SVD)   
+# M = U*S*V^T
+# donde:
+# U = term_topic
+# S = singular_values
+# V = topic_document
+term_topic = best_lsi_model.projection.u
+singular_values = best_lsi_model.projection.s
+topic_document = (gensim.matutils.corpus2dense(best_lsi_model[bow_corpus], len(singular_values)).T / singular_values).T
+term_topic.shape, singular_values.shape, topic_document.shape
+#-----------------------------------------------------------------------------* 
+document_topics = pd.DataFrame(np.round(topic_document.T, 5), 
+                               columns=['T'+str(i) for i in range(1, int(opt_topic)+1)])
+document_topics.head(15)
+#-----------------------------------------------------------------------------* 
+document_numbers = range(0,3)
 
-# for topic_id, topic in best_lda_model.print_topics(num_topics=opt_topic, num_words=topn):
-#   print('Topic #'+str(topic_id+1)+':')
-#   print(topic)
-#   print()
 
-# topics = [[(term, round(wt, 3)) 
-#                for term, wt in best_lda_model.show_topic(n, topn=topn)] 
-#                    for n in range(0, best_lda_model.num_topics)]
+for document_number in document_numbers:
+    top_topics = list(document_topics.columns[np.argsort(-np.absolute(document_topics.iloc[document_number].values))][:1])
+    #total_score = sum()
+    print('Document #'+str(document_number)+':')
+    print('Dominant Topics (top 3):', top_topics)
+    print('Comentario:')
+    print(topic_train_corpus.iloc[document_number])
+    print()
+    
+ 
 
-# for idx, topic in enumerate(topics):
-#     print('Topic #'+str(idx+1)+':')
-#     print([term for term, wt in topic])
-#     print()
+topics = [[(term, round(wt, 3)) 
+               for term, wt in best_lsi_model.show_topic(n, topn=topn)] 
+                   for n in range(0, best_lsi_model.num_topics)]
 
-# topics_df = pd.DataFrame([[term for term, wt in topic] for topic in topics], 
-#                          columns = ['Term'+str(i) for i in range(1, topn+1)],
-#                          index=['Topic '+str(t) for t in range(1, best_lda_model.num_topics+1)]).T
-# topics_df
+for idx, topic in enumerate(topics):
+    print('Topic #'+str(idx+1)+':')
+    print([term for term, wt in topic])
+    print()
+#-----------------------------------------------------------------------------*    
+topics_df = pd.DataFrame([[term for term, wt in topic] for topic in topics], 
+                          columns = ['Term'+str(i) for i in range(1, topn+1)],
+                          index=['Topic '+str(t) for t in range(1, best_lsi_model.num_topics+1)]).T
+topics_df    
+#-----------------------------------------------------------------------------*    
+pd.set_option('display.max_colwidth', -1)
+topics_df = pd.DataFrame([', '.join([term for term, wt in topic]) for topic in topics],
+                          columns = ['Terms per Topic'],
+                          index=['Topic'+str(t) for t in range(1, best_lsi_model.num_topics+1)]
+                          )
+topics_df
+#-----------------------------------------------------------------------------*    
+ 
+# Transform the BoW corpus using the LSI model
+lsi_corpus = best_lsi_model[bow_corpus]
 
-# pd.set_option('display.max_colwidth', -1)
-# topics_df = pd.DataFrame([', '.join([term for term, wt in topic])  
-#                               for topic in topics],
-#                          columns = ['Terms per Topic'],
-#                          index=['Topic'+str(t) for t in range(1, best_lda_model.num_topics+1)]
-#                          )
-# topics_df
+# Create a function to get the dominant topic
+for i in document_topics:
+    print(i)
+    
+    
+
+data_topic_fit = datos_topic.loc[index_train_topic]
+
+document_numbers = range(0,len(document_topics))
+dominant_topics = []
+for document_number in document_numbers:
+    top_topics = list(document_topics.columns[np.argsort(-np.absolute(document_topics.iloc[document_number].values))][:1])
+    dominant_topics.append(top_topics)
+    
+corpus_topics_lsi = pd.DataFrame({
+    'Document': range(1, len(dominant_topics) + 1),
+    'Dominant_Topic': [topic[0] for topic in dominant_topics],
+    'Train_topic': topic_train_corpus,
+    'cod_mod': data_topic_fit['CODIGO_MODULAR'],
+    'obs': data_topic_fit['OBSERVACION_RECEPCION'],
+    'flg_cat': data_topic_fit['flg_cat']
+})
+#----------------------------------------------------------------------------*
+flg_cat_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/d_flg_cat_recep.csv'
+d_flg_cat_recep = pd.read_csv(flg_cat_dir,  encoding = 'Latin-1')
+
+corpus_topics_lsi = corpus_topics_lsi.merge(d_flg_cat_recep, 
+                                how = 'left', 
+                                left_on=(['flg_cat']),
+                                right_on=(['idcatrecepcion']),
+                                indicator = False)
+corpus_topics_lsi['des_cat'] = corpus_topics_lsi['flg_cat'].astype(str) + ': ' + corpus_topics_lsi['descatrecepcion']
+
+pd.crosstab(corpus_topics_lsi.des_cat,corpus_topics_lsi.Dominant_Topic)
+#----------------------------------------------------------------------------*
+
+corpus_topics_lsi.Dominant_Topic.value_counts(normalize=True)
+corpus_topics_lsi.flg_cat.value_counts(normalize=True)
+maindir_2 = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/'
+output_topic_dir =  maindir_2 + 'topic_mdeling.csv'   
+data_topic_fit.to_csv(output_topic_dir,  encoding = 'UTF-8')
+
+data_topic_fit.head(10)
+
+pd.crosstab(corpus_topics_lsi.des_cat,corpus_topics_lsi.Dominant_Topic)
+#Tópico 1: Problemas relacionados con la entrega y la fecha de recepción.
+#Tópico 2: Preocupaciones sobre la falta de tabletas y los problemas con los cargadores solares, así como la incertidumbre en torno a la entrega y asignación de dispositivos.
+#Tópico 3: Dificultades para registrar las tabletas y asignarlas correctamente debido a problemas con la UGEL y la falta de información clara.
+#Tópico 4: Los directores discuten la devolución de tabletas a la UGEL y los desafíos asociados, como problemas con los chips y la logística de recolección.
+#Tópico 5: Los directores abordan problemas con la energía eléctrica en las escuelas y la coordinación necesaria para asegurar un funcionamiento adecuado de las tabletas.
+#Tópico 6: Los directores mencionan la necesidad de reconocer los chips de las tabletas y destacan aspectos técnicos, como la instalación de aplicativos y la ubicación de las tabletas en las aulas.
+#new_df = df[df['obs'].str.contains("cargador|bateria")]
+temp_rev = corpus_topics_lsi[corpus_topics_lsi['flg_cat']==4]
+temp_rev = corpus_topics_lsi[(corpus_topics_lsi['obs'].str.contains("internet|datos|chip"))==True] #t
+emp_rev = datos_topic[(datos_topic['obs'].str.contains("dev")) & (datos_topic['flg_cat']!=16)]#.flg_cat.value_counts()
+#%%% LDA (Latent Dirichlet Allocation)-Bow
+from gensim.test.utils import common_corpus, common_dictionary
+from gensim.models.ldamodel import LdaModel
+
+
+min_topics = 2
+max_topics = 10
+#Definir una lista para almacenar los resultados
+coherence_scores = []
+models = []
+perplexity = []
+#Iterar sobre los números de tópicos y calcular la coherencia
+from datetime import datetime
+start = datetime.now()
+for num_topics in range(min_topics, max_topics + 1):
+    lda_model = gensim.models.LdaModel(corpus=bow_corpus, 
+                                       id2word=dictionary,
+                                       chunksize=1740, 
+                                       alpha='auto',
+                                       eta='auto', 
+                                       random_state=42,
+                                       iterations=500, 
+                                       num_topics=num_topics,
+                                       passes=20, 
+                                       eval_every=None)    
+    coherence_model = CoherenceModel(model=lda_model, texts=norm_corpus_bigrams, corpus=bow_corpus, coherence='c_v')
+    coherence_score = coherence_model.get_coherence()
+    coherence_scores.append((num_topics, coherence_score))
+    perplexity_res = lda_model.log_perplexity(bow_corpus)
+    perplexity.append((num_topics, perplexity_res))
+    models.append(lda_model)
+print(datetime.now() - start)
+# Crear un dataframe a partir de los resultados
+df = pd.DataFrame(coherence_scores, columns=['Número de Tópicos', 'Coherencia'])
+
+# Imprimir el dataframe
+print(df)
+
+# Crear un gráfico de línea para los resultados
+plt.plot(df['Número de Tópicos'], df['Coherencia'], marker='o')
+# Añadir etiquetas y título al gráfico
+plt.xlabel('Número de Tópicos')
+plt.ylabel('Coherencia')
+plt.title('Relación entre el número de tópicos y la coherencia')
+#Mostrar el gráfico
+plt.show()
+# """Obteniendo el máximo número de tópicos"""
+max_coherence_row = df.loc[df['Coherencia'].idxmax()]
+num_topics_max_coherence = max_coherence_row['Número de Tópicos']
+
+topn = 20
+opt_topic  = num_topics_max_coherence
+best_model_idx = df[df['Número de Tópicos'] == opt_topic].index[0]
+best_lda_model = models[best_model_idx]
+best_lda_model.num_topics
+
+
+
+for topic_id, topic in best_lda_model.print_topics(num_topics=opt_topic, num_words=topn):
+   print('Topic #'+str(topic_id+1)+':')
+   print(topic)
+   print()
+
+topics = [[(term, round(wt, 3)) 
+               for term, wt in best_lda_model.show_topic(n, topn=topn)] 
+                   for n in range(0, best_lda_model.num_topics)]
+
+for idx, topic in enumerate(topics):
+    print('Topic #'+str(idx+1)+':')
+    print([term for term, wt in topic])
+    print()
+
+topics_df = pd.DataFrame([[term for term, wt in topic] for topic in topics], 
+                          columns = ['Term'+str(i) for i in range(1, topn+1)],
+                          index=['Topic '+str(t) for t in range(1, best_lda_model.num_topics+1)]).T
+topics_df
+
+pd.set_option('display.max_colwidth', -1)
+topics_df = pd.DataFrame([', '.join([term for term, wt in topic])  
+                              for topic in topics],
+                          columns = ['Terms per Topic'],
+                          index=['Topic'+str(t) for t in range(1, best_lda_model.num_topics+1)]
+                          )
+topics_df
 
 # """Se genera el siguiente prompt en GPT y se redactáron las siguientes categorías
 
 # En un proyecto de distribución a tabletas se registráron los comentarios de directores de escuelas sobre la recepción de las tabletas.
+# Redacta cateogrías breves que resuman cada tópico.
 # Los tópicos generados son:
 
-# Redacta oraciones que resuman cada tópico.
 
-# Topic 1: Falta de tabletas, traslado y configuración.
+tm_results = best_lda_model[bow_corpus]
+corpus_topics_lda = [sorted(topics, key=lambda record: -record[1])#[0] 
+                      for topics in tm_results]
 
-# Topic 2: Entrega de tabletas y distribución en zonas rurales.
-
-# Topic 3: Recepción de tabletas y programación escolar.
-
-# Topic 4: Problemas de entrega, verificación y observaciones sobre 
-# funcionamiento.
-
-# Topic 5: Cantidad de tabletas, necesidades de matriculados y problemas con cargadores solares.
-
-# Topic 6: Problemas de encendido, acceso y plan de datos.
-
-# Topic 7: Falta de entrega, identificación de beneficiarios y registro.
-
-# Topic 8: Problemas de chips y falta de funcionamiento de tabletas.
-
-# Topic 9: Errores en dispositivos, necesidad de actualización y problema de conectividad.
-
-# Topic 10: Recepción de tabletas, necesidad de cargadores solares y devolución de dispositivos.
-
-# Topic 11: Problemas técnicos de tabletas, caso de San y redistribución de dispositivos.
-
-# Topic 12: Falta de cargadores solares y encendido de tabletas.
-
-# Topic 13: Asignación de tabletas, nivel educativo y falta de conectividad.
-
-# Topic 14: Fecha de entrega de tabletas, asignación y lista de beneficiarios.
-
-# Topic 15: Entrega y recepción de tabletas, verificación de contenido y sistema de registro.
-
-# Topic 16: Problemas técnicos de tabletas y falta de plan de datos y cargadores solares.
-
-# Topic 17: Falta de chips, tercer par y entrega de dispositivos.
+corpus_topic_df = pd.DataFrame()
+corpus_topic_df['Document'] = range(0, len(norm_corpus_bigrams))
+corpus_topic_df['Dominant Topic'] = [item[0]+1 for item in corpus_topics_lda]
+corpus_topic_df['Contribution %'] = [round(item[1]*100, 2) for item in corpus_topics_lda]
+corpus_topic_df['Topic Desc'] = [topics_df.iloc[t[0]]['Terms per Topic'] for t in corpus_topics_lda]
+corpus_topic_df['Paper'] = norm_corpus_bigrams
 
 
-# Topic 18: Falta de cargadores solares y problema de energía eléctrica.
+print(corpus_topic_df['Dominant Topic'].value_counts())
+print(pd.isnull(corpus_topic_df['Dominant Topic']).sum())
+print(len(corpus_topic_df['Dominant Topic']))
+print(len(index_train_topic))
 
-# Topic 19: Cantidad de tabletas y asignación a matriculados.
+#"""## Fit Topic"""
 
-# Topic 20: Entrega de tabletas y asignación de operadores y direcciones.
+#topic_train_corpus, topic_test_corpus, topic_train_label_nums, topic_test_label_nums 
 
-# Topic 21: Falta de entregas e insuficiencia de cargadores solares.
+data_topic_fit = datos_topic.loc[index_train_topic]
+print(data_topic_fit.shape)
+print(corpus_topic_df.shape)
+data_topic_fit.reset_index(drop=True, inplace=True)
+corpus_topic_df.reset_index(drop=True, inplace=True)
 
-# Topic 22: Falta de entrega de tabletas y ubicación de las mismas.
+data_topic_fit['Topic'] = corpus_topic_df['Dominant Topic']
+cuadro  = pd.crosstab(data_topic_fit['Topic'],data_topic_fit['flg_cat'])
 
-# Topic 23: Recepción de tabletas, cargadores solares, falta de fluido eléctrico y verificación.
-# """
+maindir_2 = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/'
+output_topic_dir =  maindir_2 + 'topic_mdeling.csv'   
+data_topic_fit.to_csv(output_topic_dir,  encoding = 'UTF-8')
 
-# tm_results = best_lda_model[bow_corpus]
-# corpus_topics = [sorted(topics, key=lambda record: -record[1])[0] 
-#                      for topics in tm_results]
-
-# corpus_topic_df = pd.DataFrame()
-# corpus_topic_df['Document'] = range(0, len(norm_corpus_bigrams))
-# corpus_topic_df['Dominant Topic'] = [item[0]+1 for item in corpus_topics]
-# corpus_topic_df['Contribution %'] = [round(item[1]*100, 2) for item in corpus_topics]
-# corpus_topic_df['Topic Desc'] = [topics_df.iloc[t[0]]['Terms per Topic'] for t in corpus_topics]
-# corpus_topic_df['Paper'] = norm_corpus_bigrams
-
-# #corpus_topic_df['Dominant Topic'].value_counts()
-# #pd.isnull(corpus_topic_df['Dominant Topic']).sum()
-# print(len(corpus_topic_df['Dominant Topic']))
-# print(len(index_train_topic))
-
-# """## Fit Topic"""
-
-# data_topic_fit = datos.iloc[index_train_topic]
-# data_topic_fit['obs'] = train_corpus
-# #data_topic_fit['Target_2'] = train_label_nums
-# data_topic_fit['Topic'] = corpus_topic_df['Dominant Topic']
-# #pd.crosstab(data_topic_fit['Topic'],data_topic_fit['Target_2'])
-
-# data_topic_fit.head(10)
+data_topic_fit.head(10)
 
 # #datos_comp['Topic'] = np.where((datos_comp.OBSERVACION_RECEPCION.str.contains('(?i)(fal|solo|mal estado|malog)')) & (datos_comp['Topic']==10),5,datos_comp['Topic'])
 # #datos_comp['Topic'] = np.where((datos_comp.OBSERVACION_RECEPCION.str.contains('(?i)(ning)(.+)(obs|noved)(.+)')),10,datos_comp['Topic'])
