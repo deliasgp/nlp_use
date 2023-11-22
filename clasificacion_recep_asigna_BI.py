@@ -14,6 +14,7 @@ sys.path.append('D:/repositorios_git/nlp_use/')
 import normalizar_texto as nt
 from normalizar_texto import palabras_repetidas
 from joblib import load
+import numpy as np
 #-----------------------------------------------------------------------------*
 #CARGANDO DATOS
 #-----------------------------------------------------------------------------*
@@ -77,11 +78,26 @@ ninguna_obs = modelos[0] #MODELO DE FEATURE ENGINEERING Y CLASIFICACION DE NINGU
 recep = modelos[1] #MODELO DE FEATURE ENGINEERING Y CLASIFICACION DE RECEPCION
 asigna = modelos[2] #MODELO DE FEATURE ENGINEERING Y CLASIFICACION DE ASIGNACION
 #-----------------------------------------------------------------------------*
+import psycopg2
+db_params = {
+    "dbname": "DGAVIDIA",
+    "host": "localhost",
+    "user": "postgres",
+    "port": 5432,
+    "password": "a07119420"
+}
+conn_dg = psycopg2.connect(**db_params)
+#-----------------------------------------------------------------------------*
 import nltk
 stopword_list = nltk.corpus.stopwords.words('spanish')
+dir_nlp = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación/BD_USE/NLP/'
+#-----------------------------------------------------------------------------*
+#stop_words_nombres = pd.read_csv(dir_nlp+'NOMBRES.csv')
+#stop_words_apellidos = pd.read_csv(dir_nlp+'APELLIDOS.csv')
 
-stop_words_nombres = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/NOMBRES.csv')
-stop_words_apellidos = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/APELLIDOS.csv')
+stop_words_nombres = pd.read_sql_query('SELECT * FROM public.stop_words_nombres', conn_dg)
+stop_words_apellidos = pd.read_sql_query('SELECT * FROM public.stop_words_apellidos', conn_dg)
+#-----------------------------------------------------------------------------*
 stop_words_tablets = nt.stop_words_use(local_file=False,maindir='',label_benef=False) + stopword_list 
 stop_words_tablets = stop_words_tablets + list(stop_words_nombres['word'])
 stop_words_tablets = stop_words_tablets + list(stop_words_apellidos['word'])
@@ -102,33 +118,26 @@ for word in eliminar_stop_words:
 #
 #
 #-----------------------------------------------------------------------------*
-maindir_minedu     = 'E:/Mi unidad/dgavidia_minedu'
-maindir_hogar      = 'E:/Mi unidad/dgavidia_minedu'
-maindir            =  maindir_minedu
-subdir      =  '/BD USE/NLP/TABLETAS/Input/'
-output      =  '/BD USE/NLP/TABLETAS/Output/'
+conn_dg = psycopg2.connect(**db_params)
+query_test = """SELECT iddia, COUNT(*) 
+               FROM public.sm_tablets_obs 
+               GROUP BY iddia;"""
+               
+count_iddia          = pd.read_sql_query(query_test, conn_dg)
+count_iddia
 #---------------------------------------------*
-from os import walk
-import re
-filenames = next(walk(maindir+subdir), (None, None, []))[2]  # [] if no file
-r = re.compile(".*.xlsx")
-filenames = list(filter(r.match, filenames)) # Read Note below
-#---------------------------------------------*
-fec_t1 = "20230920"
-fec_t0 = "20230913"
+fec_t1 = np.max(count_iddia['iddia'])
+fec_t0 = np.min(count_iddia['iddia'])
+fec_t1 = str(fec_t1)
+fec_t0 = str(fec_t0)
 #-----------------------------------------------------------------------------*
-#recepcion_20230628
-recepcion_dir  = maindir + subdir + 'recepcion_' + fec_t1+'.csv'
+dir_recep_t0 = """SELECT * FROM public.obs_recepcion WHERE iddia = """+fec_t0
+datos_recep_t0 = pd.read_sql_query(dir_recep_t0,conn_dg)
+datos_recep_t0.columns
 
-dir_recep_t0 = maindir_minedu + output+'/BI/'+fec_t0+'/obs_recepcion_'+fec_t0+'.csv'
-dir_asigna_t0 = maindir_minedu + output+'/BI/'+fec_t0+'/obs_asigna_'+fec_t0+'.csv'
-datos_recep_t0 = pd.read_csv(dir_recep_t0,  encoding = 'latin-1')
-datos_asigna_t0 = pd.read_csv(dir_asigna_t0,  encoding = 'latin-1')
-
-dir_recep_t1  = maindir + subdir + '/obs_recepcion_'+fec_t1+'.xlsx'
-dir_asigna_t1  = maindir + subdir + '/obs_asigna_'+fec_t1+'.xlsx'
-datos_recep_t1 = pd.read_excel(dir_recep_t1)
-datos_asigna_t1 = pd.read_excel(dir_asigna_t1)
+dir_recep_t1  = """SELECT * FROM public.obs_recepcion WHERE iddia = """+fec_t1
+datos_recep_t1 = pd.read_sql_query(dir_recep_t1,conn_dg)
+datos_recep_t1.columns
 #-----------------------------------------------------------------------------*
 def limpiar_texto(x,stopwords,autocorrecion=False):
     texto_limpio = []
@@ -154,29 +163,13 @@ def clasificacion(x,modelo,feature):
     return(res_model)
 #------------------------------------------------------------------------------*
 recep_new = datos_recep_t1.merge(datos_recep_t0[["idinstitucioneducativa", "OBSERVACION_RECEPCION"]], 
-                                       left_on=(['CODIGO_MODULAR','OBSERVACION_RECEPCION']), 
+                                       left_on=(['idinstitucioneducativa','OBSERVACION_RECEPCION']), 
                                        right_on=(['idinstitucioneducativa','OBSERVACION_RECEPCION']), 
                                        how="outer", 
                                        indicator=True).query("_merge == 'left_only'").drop(columns="_merge")
 
-recep_new = recep_new[['CODIGO_MODULAR', 'OBSERVACION_RECEPCION']]
+recep_new = recep_new[['idinstitucioneducativa', 'OBSERVACION_RECEPCION']]
 #-----------------------------------------------------------------------------*
-x = limpiar_texto(recep_new['OBSERVACION_RECEPCION'],stopwords = stop_words_tablets)
-#-----------------------------------------------------------------------------*
-ninguna_obs_cat = clasificacion(x, modelo = ninguna_obs[0], feature = ninguna_obs[1])
-recep_cat = clasificacion(x,modelo = recep[0],feature = recep[1])
-import numpy as np
-ninguna_obs_cat = np.where(pd.Series(x).str.contains(r'(?i)(ninguno).(observacion)') | ninguna_obs_cat==1 ,1,ninguna_obs_cat)
-recep_cat = np.where(ninguna_obs_cat==1,99,recep_cat)
-recep_new['target'] = recep_cat
-#-----------------------------------------------------------------------------*
-#1 Faltan o necesitan más equipos
-#2 Tabletas con defectos técnicos
-#3 Tabletas sin plan de datos
-#4 Dificultades con la carga de las tableta
-#5 Comentarios sobre devolución de equipos a IE o UGEL
-#6 Problemas con la recepción del equipo
-#7 Problemas con los registros y sistemas 
 def d_cat_recep(x):
     if x == 1:
         return '1. Faltan o necesitan más equipos'
@@ -194,21 +187,39 @@ def d_cat_recep(x):
         return '7. Problemas con los registros y sistemas'
     elif x == 99: 
         return '99. Ninguna observación'
-    
-   
-#recep_new['idcatrecepcion'] = recep_new['idcatrecepcion'].apply(d_cat_recep)
+#-----------------------------------------------------------------------------*
+#1 Faltan o necesitan más equipos
+#2 Tabletas con defectos técnicos
+#3 Tabletas sin plan de datos
+#4 Dificultades con la carga de las tableta
+#5 Comentarios sobre devolución de equipos a IE o UGEL
+#6 Problemas con la recepción del equipo
+#7 Problemas con los registros y sistemas  
+#-----------------------------------------------------------------------------*
+# execute only if recep_new has data
+if recep_new.shape[0] > 0:
+    x = limpiar_texto(recep_new['OBSERVACION_RECEPCION'],stopwords = stop_words_tablets)
+    #-----------------------------------------------------------------------------*
+    ninguna_obs_cat = clasificacion(x, modelo = ninguna_obs[0], feature = ninguna_obs[1])
+    recep_cat = clasificacion(x,modelo = recep[0],feature = recep[1])
+    import numpy as np
+    ninguna_obs_cat = np.where(pd.Series(x).str.contains(r'(?i)(ninguno).(observacion)') | ninguna_obs_cat==1 ,1,ninguna_obs_cat)
+    recep_cat = np.where(ninguna_obs_cat==1,99,recep_cat)
+    recep_new['target'] = recep_cat
+    recep_new['d_catrecepcion'] = recep_new['target'].apply(d_cat_recep)
 #-----------------------------------------------------------------------------*
 #
 #
+#
 #  ASIGNACION
-asigna_new = datos_asigna_t1.merge(datos_asigna_t0[["idinstitucioneducativa","serie_equipo","observaciones"]],
-                                       left_on=(['CODIGO_MODULAR','SERIE_EQUIPO','OBSERVACIONES_A']), 
-                                       right_on=(['idinstitucioneducativa','serie_equipo','observaciones']), 
-                                       how="outer", 
-                                       indicator=True).query("_merge == 'left_only'").drop(columns="_merge")
-
-asigna_new = asigna_new[["CODIGO_MODULAR","SERIE_EQUIPO","OBSERVACIONES_A"]]
-x = limpiar_texto(asigna_new['OBSERVACIONES_A'],stopwords = stop_words_tablets)
+#
+#
+#
+#-----------------------------------------------------------------------------*
+dir_asigna_t1  = """SELECT idinstitucioneducativa, serie_equipo, observaciones FROM public.obs_asigna WHERE iddia = """+fec_t1
+datos_asigna_t1 = pd.read_sql_query(dir_asigna_t1,conn_dg)
+asigna_new = datos_asigna_t1
+x = limpiar_texto(asigna_new['observaciones'],stopwords = stop_words_tablets)
 #-----------------------------------------------------------------------------*
 # 1. asigna_fam_model, 2.asigna_fam_feature, 3.asigna_model, 4.asigna_feature
 ninguna_obs_cat = clasificacion(x, modelo = ninguna_obs[0], feature = ninguna_obs[1])
@@ -249,16 +260,18 @@ def d_cat_asigna(x):
     elif x == 99: 
         return '99. Ninguna observación'
     
-asigna_new['d_asigna'] = asigna_new['target'].apply(d_cat_asigna)
 #-----------------------------------------------------------------------------*
-asigna_new['target'] = np.where((asigna_new['OBSERVACIONES_A'].str.contains(r'(?i)(\bno\b).(entreg)')) & 
+asigna_new['target'] = np.where((asigna_new['observaciones'].str.contains(r'(?i)(\bno\b).(entreg)')) & 
                                 (asigna_new['target']==99),
                                 0,
                                 asigna_new['target']) 
 #-----------------------------------------------------------------------------*
-asigna_new['d_asigna'] = asigna_new['target'].apply(d_cat_asigna)
-#target_new = asigna_new[asigna_new['OBSERVACIONES_A'].str.contains(r'(?i)(\bno\b).(entreg)')]
+asigna_new['target'] = np.where((asigna_new['observaciones'].str.contains(r'(?i)(hurto)')) & 
+                                (asigna_new['target']!=3),
+                                3,
+                                asigna_new['target']) 
 #-----------------------------------------------------------------------------*
+asigna_new['d_asigna'] = asigna_new['target'].apply(d_cat_asigna)
 #-----------------------------------------------------------------------------*    
 #
 #
@@ -267,22 +280,24 @@ asigna_new['d_asigna'] = asigna_new['target'].apply(d_cat_asigna)
 #
 #
 #
-#-----------------------------------------------------------------------------*         
-recepcion_dir  = maindir + subdir + 'recepcion_' + fec_t1+'.csv'
-recepcion = pd.read_csv(recepcion_dir)
+#-----------------------------------------------------------------------------*      
+query_fec_t1 = """SELECT DISTINCT "CODIGO_MODULAR",
+                         "NRO_PECOSA",
+                         A."OBSERVACION_RECEPCION",
+                         "FECHA_CREACION_R",
+                         "FECHA_MODIFICACION_R",
+                         FASE,
+                         B.idcatrecepcion
+                FROM public."sm_tablets_obs" A
+                LEFT JOIN (SELECT * FROM public.obs_recepcion WHERE iddia="""+ str(fec_t0) +""") B
+                ON (A."CODIGO_MODULAR" = B."idinstitucioneducativa" AND
+                    A."OBSERVACION_RECEPCION" = B."OBSERVACION_RECEPCION")
+                WHERE LENGTH(A."OBSERVACION_RECEPCION")>0 AND A.iddia="""+ str(fec_t1) + ";"
 
-
-
-
-recepcion.groupby(['FASE','TIPO_EQUIPO'])['FASE'].count()
-
-recep_data = recepcion[['CODIGO_MODULAR',
-                        'NRO_PECOSA',
-                        'OBSERVACION_RECEPCION',
-                        'FECHA_CREACION_R',
-                        'FECHA_MODIFICACION_R',
-                        'FASE']][recepcion.OBSERVACION_RECEPCION.str.len()>0].drop_duplicates()
-#idinstitucioneducativa	nro_pecosa	OBSERVACION_RECEPCION	fecha_creacion	fecha_modificacion	idcatrecepcion	flg_bin	tipo_categoria	fecha_corte	fase
+recep_data = pd.read_sql_query(query_fec_t1, conn_dg)
+recep_data['idcatrecepcion'].value_counts()
+recep_data['idcatrecepcion'].isnull().sum()
+recep_data.shape
 #------------------------------------------------------------------------------*
 datos_recep_t0['OBS_TEMP'] = datos_recep_t0['OBSERVACION_RECEPCION'].str.upper()
 datos_recep_t0['target'] = datos_recep_t0['idcatrecepcion']
@@ -296,9 +311,9 @@ obs_recepcion_t1 = recep_data.merge(datos_recep_t0[['idinstitucioneducativa','OB
                                 right_on=(['idinstitucioneducativa','OBS_TEMP']),
                                 indicator = False)
 obs_recepcion_t1 = obs_recepcion_t1.drop_duplicates()
-#obs_recepcion_t1['dup'] = obs_recepcion_t1.groupby(['CODIGO_MODULAR','OBS_TEMP']).transform('size')
-#df_dup = obs_recepcion_t1[obs_recepcion_t1['dup'] > 1]
-#temp_rev = obs_recepcion_t1.drop_duplicates()
+
+obs_recepcion_t1.columns
+
 #-----------------------------------------------------------------------------*
 obs_recepcion_t1 = obs_recepcion_t1.merge(recep_new[['CODIGO_MODULAR','OBS_TEMP','target_new']], 
                                 how = 'left', 
@@ -310,9 +325,7 @@ obs_recepcion_t1['flg_cat'] = np.where(obs_recepcion_t1['target'].notnull(),
                                        obs_recepcion_t1['target'],
                                        obs_recepcion_t1['target_new'])
 
-obs_recepcion_t1['tipo_categoria'] = np.where(obs_recepcion_t1['_merge']=='both',
-                                       2,
-                                       1)
+obs_recepcion_t1['tipo_categoria'] = 1#np.where(obs_recepcion_t1['_merge']=='both',2,1)
 #-----------------------------------------------------------------------------*
 #-----------------------------------------------------------------------------*
 print(obs_recepcion_t1['_merge'].value_counts())
@@ -320,7 +333,7 @@ print(obs_recepcion_t1['_merge'].value_counts())
 obs_recepcion_t1 = obs_recepcion_t1[['CODIGO_MODULAR',
                                      'NRO_PECOSA',
                                      'OBSERVACION_RECEPCION','FECHA_CREACION_R','FECHA_MODIFICACION_R',
-                                     'flg_cat','FASE','tipo_categoria']]
+                                     'idcatrecepcion','fase','tipo_categoria']]
 #----------------------------------------------------------------------------*
 for col in obs_recepcion_t1.columns:
     print(col)
@@ -328,17 +341,17 @@ for col in obs_recepcion_t1.columns:
 obs_recepcion_t1 = obs_recepcion_t1.rename(columns = {'CODIGO_MODULAR': 'idinstitucioneducativa',
                                                       'NRO_PECOSA': 'nro_pecosa',
                                                       'FECHA_CREACION_R':'fecha_creacion',
-                                                      'FECHA_MODIFICACION_R':'fecha_modificacion',
-                                                      'flg_cat': 'idcatrecepcion',
-                                                      'FASE': 'fase'}, inplace = False)    
+                                                      'FECHA_MODIFICACION_R':'fecha_modificacion'}, inplace = False)    
 fec_t1
-fecha_corte = '2023-09-20'
+# SEPARATE FEC_T1 EN AÑO, MES Y DIA
+fec_t1 = str(fec_t1)
+fecha_corte = fec_t1[0:4]+'-'+fec_t1[4:6]+'-'+fec_t1[6:8]
+
 obs_recepcion_t1['fecha_corte'] = fecha_corte
 #temp1 = obs_recepcion_t1[obs_recepcion_t1['idcatrecepcion'].isnull()==True]
 #temp2 = obs_recepcion[obs_recepcion['CODIGO_MODULAR']==267849]
 #----------------------------------------------------------------------------*
-obs_recep_dir = maindir + output + '/BI/'+ fec_t1 + '/obs_recepcion_'+fec_t0+'.csv'
-obs_recepcion_t1.to_csv(obs_recep_dir,  encoding = 'latin-1')
+obs_recepcion_t1.to_sql('obs_recepcion_bi', engine, if_exists='replace', index=False)
 #-----------------------------------------------------------------------------*
 #
 #
@@ -348,46 +361,47 @@ obs_recepcion_t1.to_csv(obs_recep_dir,  encoding = 'latin-1')
 #
 #
 #-----------------------------------------------------------------------------*
-asigna_data = recepcion[['CODIGO_MODULAR',
-                         'SERIE_EQUIPO',
-                         'CODIGO',
-                         'NRO_PECOSA',
-                         'OBSERVACIONES_A',
-                         'FECHA_CREACION_AT',
-                         'FECHA_MODIFICACION_AT',
-                         'FASE']][recepcion.OBSERVACIONES_A.str.len()>0].drop_duplicates()
-#for col in recepcion.columns:
-#    print(col)
-#----------------------------------------------------------------------------*
-datos_asigna_t0['OBS_TEMP'] = datos_asigna_t0['observaciones'].str.upper()
-datos_asigna_t0['target'] = datos_asigna_t0['idcatasignacion']
+query_fec_t1 = """SELECT DISTINCT "CODIGO_MODULAR",
+                         "SERIE_EQUIPO",
+                         "CODIGO",
+                         "NRO_PECOSA",
+                         "OBSERVACIONES_A",
+                         "FECHA_CREACION_AT",
+                         "FECHA_MODIFICACION_AT",
+                         FASE,
+                         B.idcatasignacion,
+                         B."tipo_categoria"
+                FROM public."sm_tablets_obs" A
+                LEFT JOIN (SELECT * FROM public.obs_asigna WHERE iddia="""+ str(fec_t0) +""") B
+                ON (A."CODIGO_MODULAR" = B."idinstitucioneducativa" AND
+                    A."SERIE_EQUIPO" = B."serie_equipo" AND
+                    A."OBSERVACIONES_A" = B."observaciones")
+                WHERE LENGTH(A."OBSERVACIONES_A")>0 AND A.iddia="""+ str(fec_t1) + ";"
 
-asigna_new['OBS_TEMP'] = asigna_new['OBSERVACIONES_A'].str.upper()
-asigna_new = asigna_new.rename(columns = {'target': 'target_new'},inplace = False)
-asigna_data['OBS_TEMP'] = asigna_data['OBSERVACIONES_A'].str.upper()
+asigna_data = pd.read_sql_query(query_fec_t1, conn_dg)
 #-----------------------------------------------------------------------------*
-obs_asigna_t1 = asigna_data.merge(datos_asigna_t0[['idinstitucioneducativa','serie_equipo','OBS_TEMP','target']], 
+obs_asigna_t1 = asigna_data.merge(asigna_new[['idinstitucioneducativa','serie_equipo','observaciones','target']], 
                                 how = 'left', 
-                                left_on=(['CODIGO_MODULAR','SERIE_EQUIPO','OBS_TEMP']),
-                                right_on=(['idinstitucioneducativa','serie_equipo','OBS_TEMP']),
-                                indicator = False)
-#-----------------------------------------------------------------------------*
-obs_asigna_t1 = obs_asigna_t1.merge(asigna_new[['CODIGO_MODULAR','SERIE_EQUIPO','OBS_TEMP','target_new']], 
-                                how = 'left', 
-                                left_on=(['CODIGO_MODULAR','SERIE_EQUIPO','OBS_TEMP']),
-                                right_on=(['CODIGO_MODULAR','SERIE_EQUIPO','OBS_TEMP']),
+                                left_on=(['CODIGO_MODULAR','SERIE_EQUIPO','OBSERVACIONES_A']),
+                                right_on=(['idinstitucioneducativa','serie_equipo','observaciones']),
                                 indicator = True)
 #-----------------------------------------------------------------------------*
+obs_asigna_t1.columns
 print(obs_asigna_t1['_merge'].value_counts())
+obs_asigna_t1['tipo_categoria'].value_counts()
+obs_asigna_t1.shape
+obs_asigna_t1['idinstitucioneducativa'].isnull().sum()
 #----------------------------------------------------------------------------*
-obs_asigna_t1['flg_cat'] = np.where(obs_asigna_t1['target'].notnull(),
-                                       obs_asigna_t1['target'],
-                                       obs_asigna_t1['target_new'])
+obs_asigna_t1['idcatasignacion'] = np.where(obs_asigna_t1['idcatasignacion'].notnull(),
+                                            obs_asigna_t1['idcatasignacion'],
+                                            obs_asigna_t1['target'])
 
 obs_asigna_t1['tipo_categoria'] = np.where(obs_asigna_t1['_merge']=='both',
                                        2,
-                                       1)    
+                                       obs_asigna_t1['tipo_categoria'])    
 #----------------------------------------------------------------------------*
+obs_asigna_t1.columns
+
 obs_asigna_t1 = obs_asigna_t1[['CODIGO_MODULAR',                        
                         'NRO_PECOSA',
                         'CODIGO',
@@ -395,8 +409,8 @@ obs_asigna_t1 = obs_asigna_t1[['CODIGO_MODULAR',
                         'OBSERVACIONES_A',
                         'FECHA_CREACION_AT',
                         'FECHA_MODIFICACION_AT',
-                        'flg_cat',
-                        'FASE','tipo_categoria']]
+                        'idcatasignacion',
+                        'fase','tipo_categoria']]
 #----------------------------------------------------------------------------*
 obs_asigna_t1['fecha_corte'] = fecha_corte
 obs_asigna_t1['fecha_siagie'] = fecha_corte
@@ -412,19 +426,36 @@ obs_asigna_t1 = obs_asigna_t1.rename(columns = {'CODIGO_MODULAR': 'idinstitucion
                                               'FASE': 'fase'}, inplace = False)
 
 obs_asigna_t1 = obs_asigna_t1.drop_duplicates()
-#----------------------------------------------------------------------------*#
-#temp1 = obs_asigna_t1[obs_asigna_t1['idcatasignacion'].isnull()==True]
-#temp2 = obs_recepcion[obs_recepcion['CODIGO_MODULAR']==267849]
 #----------------------------------------------------------------------------*
 obs_asigna_dir = maindir + output + '/BI/'+ fec_t1+ '/obs_asigna_'+fec_t1+'.csv'
 obs_asigna_t1.to_csv(obs_asigna_dir,  encoding = 'latin-1')    
 #-----------------------------------------------------------------------------*    
-    
+from sqlalchemy import create_engine
+engine = create_engine('postgresql://postgres:a07119420@localhost:5432/DGAVIDIA')
+obs_asigna_t1.to_sql('obs_asigna_bi', engine, if_exists='replace', index=False)
+#-----------------------------------------------------------------------------*        
+asigna_bi = pd.read_sql_query('SELECT * FROM public.obs_asigna_bi', conn_dg)    
+recep_bi = pd.read_sql_query('SELECT * FROM public.obs_recepcion_bi', conn_dg)
 
-    
-    
-    
-    
+dir_nlp = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación/BD_USE/NLP/'
+
+maindir_minedu     = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación'
+maindir_hogar      = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación'
+
+maindir            =  maindir_minedu
+subdir      =  '/BD_USE/NLP/TABLETAS/Input/'
+output      =  '/BD_USE/NLP/TABLETAS/Output/'
+
+obs_asigna_dir = maindir+output+'BI/'+fec_t1+'/obs_asigna_'+fec_t1+'.csv'
+obs_recep_dir = maindir+output+'BI/'+fec_t1+'/obs_recepcion_'+fec_t1+'.csv'
+
+os.makedirs(os.path.dirname(obs_asigna_dir), exist_ok=True)
+os.makedirs(os.path.dirname(obs_recep_dir), exist_ok=True)
+#-----------------------------------------------------------------------------*        
+asigna_bi.to_csv(obs_asigna_dir,  encoding = 'latin-1')
+recep_bi.to_csv(obs_recep_dir,  encoding = 'latin-1')
+#-----------------------------------------------------------------------------*     
+
     
     
     
