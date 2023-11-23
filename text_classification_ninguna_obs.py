@@ -22,13 +22,15 @@ sys.path.append('D:/repositorios_git/nlp_use/')
 import normalizar_texto as nt
 #-----------------------------------------------------------------------------*
 fec_t = "20230809"
-obs_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/Input/'+'obs_'+fec_t+'.xlsx'
+
+minedu_dir  = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación'
+obs_dir = minedu_dir + '/BD_USE/NLP/TABLETAS/Input/'+'obs_'+fec_t+'.xlsx'
 datos = pd.read_excel(obs_dir)
 #-----------------------------------------------------------------------------*
 stopword_list = nltk.corpus.stopwords.words('spanish')
 
-stop_words_nombres = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/NOMBRES.csv')
-stop_words_apellidos = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/APELLIDOS.csv')
+stop_words_nombres = pd.read_csv(minedu_dir+'/BD_USE/NLP/NOMBRES.csv')
+stop_words_apellidos = pd.read_csv(minedu_dir+'/BD_USE/NLP/APELLIDOS.csv')
 stop_words_tablets = nt.stop_words_use(local_file=False,maindir='',label_benef=False,sw_cen_pob=False) + stopword_list 
 stop_words_tablets = stop_words_tablets + list(stop_words_nombres['word'])
 stop_words_tablets = stop_words_tablets + list(stop_words_apellidos['word'])
@@ -704,7 +706,7 @@ print('Test Accuracy:', rfc_tfidf_test_score)
 
 
 repo_dir = 'D:/repositorios_git/nlp_use/'
-dir_ninguna_obs_rf_tf_idf = repo_dir+'/ninguna_obs_os_svm_tf_idf.joblib'
+dir_ninguna_obs_rf_tf_idf = repo_dir+'/ninguna_obs_os_rf_tf_idf.joblib'
 dump(rfc, dir_ninguna_obs_rf_tf_idf)
 #%%% 5.5-SGDC (Stochastic Gradient Descent)
 svm_sgd = SGDClassifier(loss='hinge', penalty='l2', max_iter=100, random_state=42)

@@ -26,13 +26,14 @@ sys.path.append('D:/repositorios_git/nlp_use/')
 import normalizar_texto as nt
 #-----------------------------------------------------------------------------*
 fec_t = "20230809"
-obs_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/Input/observaciones/'+fec_t+'/obs_asigna_'+fec_t+'.xlsx'
+minedu_dir  = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación'
+obs_dir = minedu_dir + '/BD_USE/NLP/TABLETAS/Input/observaciones/' +fec_t+'/obs_asigna_'+fec_t+'.xlsx'
 datos = pd.read_excel(obs_dir)
 #-----------------------------------------------------------------------------*
 stopword_list = nltk.corpus.stopwords.words('spanish')
 
-stop_words_nombres = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/NOMBRES.csv')
-stop_words_apellidos = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/APELLIDOS.csv')
+stop_words_nombres = pd.read_csv(minedu_dir + '/BD_USE/NLP/NOMBRES.csv')
+stop_words_apellidos = pd.read_csv(minedu_dir + '/BD_USE/NLP/APELLIDOS.csv')
 stop_words_tablets = nt.stop_words_use(local_file=False,maindir='',label_benef=False) + stopword_list 
 stop_words_tablets = stop_words_tablets + list(stop_words_nombres['word'])
 stop_words_tablets = stop_words_tablets + list(stop_words_apellidos['word'])

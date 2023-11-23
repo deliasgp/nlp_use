@@ -27,13 +27,16 @@ sys.path.append('D:/repositorios_git/nlp_use/')
 import normalizar_texto as nt
 #-----------------------------------------------------------------------------*
 fec_t = "20230809"
-obs_dir = 'E:/Mi unidad/dgavidia_minedu/BD USE/NLP/TABLETAS/Input/observaciones/'+fec_t+'/obs_recepcion_'+fec_t+'.xlsx'
+
+minedu_dir  = 'C:/Users/dgavidia/OneDrive - Ministerio de Educación'
+obs_dir = minedu_dir + '/BD_USE/NLP/TABLETAS/Input/observaciones/'+fec_t+'/obs_recepcion_'+fec_t+'.xlsx'
+
 datos = pd.read_excel(obs_dir)
 #-----------------------------------------------------------------------------*
 stopword_list = nltk.corpus.stopwords.words('spanish')
 
-stop_words_nombres = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/NOMBRES.csv')
-stop_words_apellidos = pd.read_csv('E:/Mi unidad/dgavidia_minedu/BD USE/NLP/APELLIDOS.csv')
+stop_words_nombres = pd.read_csv( minedu_dir + '/BD_USE/NLP/NOMBRES.csv')
+stop_words_apellidos = pd.read_csv( minedu_dir + '/BD_USE/NLP/APELLIDOS.csv')
 stop_words_tablets = nt.stop_words_use(local_file=False,maindir='',label_benef=False) + stopword_list 
 stop_words_tablets = stop_words_tablets + list(stop_words_nombres['word'])
 stop_words_tablets = stop_words_tablets + list(stop_words_apellidos['word'])
@@ -582,10 +585,10 @@ cv = CountVectorizer(binary=True, min_df=0.0, max_df=1.0)
 cv_train_features = cv.fit_transform(over_train_corpus)
 cv_test_features = cv.transform(test_corpus)
 
-gir_repo_dir = 'D:/repositorios_git/nlp_use/'
-dir_os_bow = gir_repo_dir+'/recep_os_bow.pickle'
-with open(dir_os_bow, 'wb') as f:
-    pickle.dump(cv, f)
+#gir_repo_dir = 'D:/repositorios_git/nlp_use/'
+#dir_os_bow = gir_repo_dir+'/recep_os_bow.pickle'
+#with open(dir_os_bow, 'wb') as f:
+#    pickle.dump(cv, f)
 #%%% B-2.2 - Bag of N-Grams model:
 bv = CountVectorizer(binary=True, ngram_range=(2,2))
 bv_train_features = bv.fit_transform(over_train_corpus)
@@ -598,7 +601,7 @@ tv = TfidfVectorizer(use_idf=True, min_df=0.0, max_df=1.0)
 tv_train_features = tv.fit_transform(over_train_corpus)
 
 gir_repo_dir = 'D:/repositorios_git/nlp_use/'
-dir_os_tfidf = gir_repo_dir+'/recep_os_tf_idf.pickle'
+dir_os_tfidf = gir_repo_dir+'/feat_engine_recepcion_os_tf_idf.pickle'
 with open(dir_os_tfidf, 'wb') as f:
     pickle.dump(tv, f)
     
@@ -679,9 +682,9 @@ print('Mean CV Accuracy:', svm_bow_cv_mean_score)
 svm_bow_test_score = svm.score(cv_test_features, test_label_nums)
 print('Test Accuracy:', svm_bow_test_score)
 
-gir_repo_dir = 'D:/repositorios_git/nlp_use/'
-dir_os_svm_rf = gir_repo_dir+'/recepcion_os_svm.joblib'
-dump(svm, dir_os_svm_rf)
+#gir_repo_dir = 'D:/repositorios_git/nlp_use/'
+#dir_os_svm_rf = gir_repo_dir+'/recepcion_os_svm.joblib'
+#dump(svm, dir_os_svm_rf)
 #%%% 3.4-Random forest
 from sklearn.ensemble import RandomForestClassifier
 
@@ -694,9 +697,9 @@ print('Mean CV Accuracy:', rfc_bow_cv_mean_score)
 rfc_bow_test_score = rfc.score(cv_test_features, test_label_nums)
 print('Test Accuracy:', rfc_bow_test_score)
 
-gir_repo_dir = 'D:/repositorios_git/nlp_use/'
-dir_os_bow_rf = gir_repo_dir+'/modelo_entrenado_bow_rf.joblib'
-dump(rfc, dir_os_bow_rf)
+#gir_repo_dir = 'D:/repositorios_git/nlp_use/'
+#dir_os_bow_rf = gir_repo_dir+'/modelo_entrenado_bow_rf.joblib'
+#dump(rfc, dir_os_bow_rf)
 #%%% 3.5-SGDC (Stochastic Gradient Descent)
 from sklearn.model_selection import cross_val_score 
 from sklearn.linear_model import SGDClassifier

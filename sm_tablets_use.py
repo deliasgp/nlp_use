@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Dec 22 17:05:54 2021
-@author: DGAVIDIA
-"""
 import pandas as pd
 import numpy as np
 import pyodbc
@@ -43,31 +38,29 @@ db_params = {
     "port": 5432,
     "password": "a07119420"
 }
-fec_t = 20231025
+
 # Definir la consulta SQL
-query = """SELECT *
+query = """INSERT INTO public.sm_tablets_obs
+           SELECT *
            FROM public.sm_tablets
-           WHERE iddia = """+str(fec_t)+""" AND
-           LENGTH("OBSERVACION_RECEPCION") >0 OR
+           WHERE iddia = (SELECT MAX(DISTINCT iddia) FROM public.sm_tablets) --20231108
+           AND (LENGTH("OBSERVACION_RECEPCION") >0 OR
            LENGTH("OBSERVACION_EQUIPO") >0 OR
            LENGTH("OBSERVACIONES_A") >0 OR
-           LENGTH("OBSERVACIONES_PERDIDA") >0;"""
-          
-start = datetime.now()
+           LENGTH("OBSERVACIONES_PERDIDA") >0);"""
+
+# Establecer la conexión y ejecutar la consulta
 try:
     conn = psycopg2.connect(**db_params)
-    df = pd.read_sql_query(query, conn)
-    print("Datos importados exitosamente.")
+    cur = conn.cursor()
+    cur.execute(query)
+    conn.commit()
+    print("Consulta ejecutada exitosamente.")
 except psycopg2.Error as e:
     print("Error al conectar a PostgreSQL o al realizar la consulta:", e)
 finally:
     conn.close()
-print(datetime.now() - start)  
-#-----------------------------------------------------------------------------*
-df['iddia'] = fec_t
-from sqlalchemy import create_engine
-engine = create_engine('postgresql://postgres:a07119420@localhost:5432/DGAVIDIA')
-df.to_sql('sm_tablets_obs', engine, if_exists='append', index=False)
+
 
 
                                  
